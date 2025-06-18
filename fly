@@ -1,0 +1,152 @@
+getgenv().SwimMethod = false
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+local camera = workspace.CurrentCamera
+
+local speed = 50
+local keys = {
+    W = false,
+    A = false,
+    S = false,
+    D = false,
+}
+
+local inputBeganConnection
+local inputEndedConnection
+local heartbeatConnection
+local floatingSeat = nil
+local isActive = false
+
+local function createInvisibleSeatUnderPlayer()
+    getgenv().SwimMethod = true
+
+    if floatingSeat then floatingSeat:Destroy() end
+
+    floatingSeat = Instance.new("Seat")
+    floatingSeat.Name = "FloatingSeat"
+    floatingSeat.Size = Vector3.new(2, 1, 2)
+    floatingSeat.Transparency = 1
+    floatingSeat.CanCollide = false
+    floatingSeat.Anchored = false
+    floatingSeat.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+    floatingSeat.Parent = workspace
+
+    task.wait(0.1)
+
+    hrp.CFrame = floatingSeat.CFrame * CFrame.new(0, 3, 0)
+    task.wait(0.1)
+
+    humanoid.Sit = true
+    task.wait(0.2)
+
+    if humanoid.SeatPart ~= floatingSeat then
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "SeatFixWeld"
+        weld.Part0 = floatingSeat
+        weld.Part1 = hrp
+        weld.Parent = floatingSeat
+    end
+
+    humanoid.PlatformStand = true
+end
+
+local function destroyFloatingSeat()
+    if floatingSeat then
+        if floatingSeat:FindFirstChild("SeatFixWeld") then
+            floatingSeat.SeatFixWeld:Destroy()
+        end
+        floatingSeat:Destroy()
+        floatingSeat = nil
+    end
+end
+
+local function activateSwimBypass()
+    isActive = true
+    createInvisibleSeatUnderPlayer()
+
+    inputBeganConnection = UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        local key = input.KeyCode.Name
+        if keys[key] ~= nil then
+            keys[key] = true
+        end
+    end)
+
+    inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
+        local key = input.KeyCode.Name
+        if keys[key] ~= nil then
+            keys[key] = false
+        end
+    end)
+
+    heartbeatConnection = RunService.Heartbeat:Connect(function(dt)
+        local moveDir = Vector3.zero
+        local camCF = camera.CFrame
+
+        if keys.W then moveDir += camCF.LookVector end
+        if keys.S then moveDir -= camCF.LookVector end
+        if keys.A then moveDir -= camCF.RightVector end
+        if keys.D then moveDir += camCF.RightVector end
+
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit * speed
+            hrp.AssemblyLinearVelocity = moveDir
+        else
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+local function deactivateSwimBypass()
+    isActive = false
+    getgenv().SwimMethod = false
+
+    if inputBeganConnection then inputBeganConnection:Disconnect() end
+    if inputEndedConnection then inputEndedConnection:Disconnect() end
+    if heartbeatConnection then heartbeatConnection:Disconnect() end
+
+    inputBeganConnection = nil
+    inputEndedConnection = nil
+    heartbeatConnection = nil
+
+    for k in pairs(keys) do
+        keys[k] = false
+    end
+
+    hrp.AssemblyLinearVelocity = Vector3.zero
+
+    humanoid.PlatformStand = false
+    humanoid.Sit = false
+
+    destroyFloatingSeat()
+
+    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.LeftAlt then
+        if not isActive then
+            activateSwimBypass()
+        else
+            deactivateSwimBypass()
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait() do
+        if getgenv().SwimMethod and humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.FallingDown)
+        end
+    end
+end)
+
+print("✅ Swim bypass loaded — Press [LeftAlt] to toggle.")

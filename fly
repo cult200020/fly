@@ -86,7 +86,7 @@ local function activateSwimBypass()
         end
     end)
 
-    heartbeatConnection = RunService.Heartbeat:Connect(function(dt)
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
         local moveDir = Vector3.zero
         local camCF = camera.CFrame
 
@@ -120,16 +120,20 @@ local function deactivateSwimBypass()
         keys[k] = false
     end
 
-    hrp.AssemblyLinearVelocity = Vector3.zero
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end
 
-    humanoid.PlatformStand = false
-    humanoid.Sit = false
+    if humanoid then
+        humanoid.PlatformStand = false
+        humanoid.Sit = false
+        humanoid:ChangeState(Enum.HumanoidStateType.Running)
+    end
 
     destroyFloatingSeat()
-
-    humanoid:ChangeState(Enum.HumanoidStateType.Running)
 end
 
+-- Toggling
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.LeftAlt then
@@ -141,6 +145,15 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
+-- Respawn handler
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    hrp = character:WaitForChild("HumanoidRootPart")
+    humanoid = character:WaitForChild("Humanoid")
+    camera = workspace.CurrentCamera
+end)
+
+-- Keep changing the state while active
 task.spawn(function()
     while task.wait() do
         if getgenv().SwimMethod and humanoid then

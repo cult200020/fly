@@ -1,165 +1,283 @@
-getgenv().SwimMethod = false
-
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 local camera = workspace.CurrentCamera
+local Backpack = player:WaitForChild("Backpack")
 
-local speed = 50
-local keys = {
-    W = false,
-    A = false,
-    S = false,
-    D = false,
-}
-
-local inputBeganConnection
-local inputEndedConnection
-local heartbeatConnection
-local floatingSeat = nil
+getgenv().SwimMethod = false
 local isActive = false
+local speed = 50
+local keys = { W = false, A = false, S = false, D = false }
 
+local floatingSeat
+local inputBeganConnection, inputEndedConnection, heartbeatConnection
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlyGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 40, 0, 40)
+toggleButton.Position = UDim2.new(0, 10, 0, 50)
+toggleButton.Text = "FLY"
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 18
+toggleButton.BackgroundColor3 = Color3.new(0, 0, 0)
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(1, 0)
+toggleButton.Parent = screenGui
+
+local function makeDraggable(guiElement)
+	local dragging = false
+	local dragStart, startPos
+	guiElement.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = guiElement.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = input.Position - dragStart
+			guiElement.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+end
+
+makeDraggable(toggleButton)
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 180, 0, 160)
+frame.Position = UDim2.new(0.5, -175, 0.5, -110)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+frame.Parent = screenGui
+frame.Visible = false
+makeDraggable(frame)
+
+local title = Instance.new("TextLabel")
+title.Text = "Fly Bypass Menu"
+title.Font = Enum.Font.GothamBold
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 16
+title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, 0, 0.18, 0)
+title.Parent = frame
+
+local flyButton = Instance.new("TextButton")
+flyButton.Size = UDim2.new(0.6, 0, 0.18, 0)
+flyButton.Position = UDim2.new(0.2, 0, 0.25, 0)
+flyButton.Text = "Fly: OFF"
+flyButton.Font = Enum.Font.GothamBold
+flyButton.TextColor3 = Color3.new(1, 1, 1)
+flyButton.TextSize = 18
+flyButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+Instance.new("UICorner", flyButton).CornerRadius = UDim.new(0, 8)
+flyButton.Parent = frame
+
+local helpButton = Instance.new("TextButton")
+helpButton.Size = UDim2.new(0.6, 0, 0.16, 0)
+helpButton.Position = UDim2.new(0.2, 0, 0.5, 0)
+helpButton.Text = "How To Fly"
+helpButton.Font = Enum.Font.GothamBold
+helpButton.TextColor3 = Color3.new(1, 1, 1)
+helpButton.TextSize = 16
+helpButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+Instance.new("UICorner", helpButton).CornerRadius = UDim.new(0, 8)
+helpButton.Parent = frame
+
+toggleButton.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+end)
+
+-- Fly System
 local function createInvisibleSeatUnderPlayer()
-    getgenv().SwimMethod = true
+	getgenv().SwimMethod = true
+	if floatingSeat then floatingSeat:Destroy() end
 
-    if floatingSeat then floatingSeat:Destroy() end
+	floatingSeat = Instance.new("Seat")
+	floatingSeat.Name = "FloatingSeat"
+	floatingSeat.Size = Vector3.new(2, 1, 2)
+	floatingSeat.Transparency = 1
+	floatingSeat.CanCollide = false
+	floatingSeat.Anchored = false
+	floatingSeat.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+	floatingSeat.Parent = workspace
 
-    floatingSeat = Instance.new("Seat")
-    floatingSeat.Name = "FloatingSeat"
-    floatingSeat.Size = Vector3.new(2, 1, 2)
-    floatingSeat.Transparency = 1
-    floatingSeat.CanCollide = false
-    floatingSeat.Anchored = false
-    floatingSeat.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
-    floatingSeat.Parent = workspace
+	task.wait(0.1)
+	hrp.CFrame = floatingSeat.CFrame * CFrame.new(0, 3, 0)
+	task.wait(0.1)
+	humanoid.Sit = true
+	task.wait(0.2)
 
-    task.wait(0.1)
+	if humanoid.SeatPart ~= floatingSeat then
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = floatingSeat
+		weld.Part1 = hrp
+		weld.Parent = floatingSeat
+	end
 
-    hrp.CFrame = floatingSeat.CFrame * CFrame.new(0, 3, 0)
-    task.wait(0.1)
-
-    humanoid.Sit = true
-    task.wait(0.2)
-
-    if humanoid.SeatPart ~= floatingSeat then
-        local weld = Instance.new("WeldConstraint")
-        weld.Name = "SeatFixWeld"
-        weld.Part0 = floatingSeat
-        weld.Part1 = hrp
-        weld.Parent = floatingSeat
-    end
-
-    humanoid.PlatformStand = true
+	humanoid.PlatformStand = true
 end
 
 local function destroyFloatingSeat()
-    if floatingSeat then
-        if floatingSeat:FindFirstChild("SeatFixWeld") then
-            floatingSeat.SeatFixWeld:Destroy()
-        end
-        floatingSeat:Destroy()
-        floatingSeat = nil
-    end
+	if floatingSeat then
+		if floatingSeat:FindFirstChild("SeatFixWeld") then
+			floatingSeat.SeatFixWeld:Destroy()
+		end
+		floatingSeat:Destroy()
+		floatingSeat = nil
+	end
 end
 
 local function activateSwimBypass()
-    isActive = true
-    createInvisibleSeatUnderPlayer()
+	isActive = true
+	createInvisibleSeatUnderPlayer()
+	flyButton.Text = "Fly: ON"
 
-    inputBeganConnection = UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-        local key = input.KeyCode.Name
-        if keys[key] ~= nil then
-            keys[key] = true
-        end
-    end)
+	inputBeganConnection = UserInputService.InputBegan:Connect(function(input, processed)
+		if not processed and keys[input.KeyCode.Name] ~= nil then
+			keys[input.KeyCode.Name] = true
+		end
+	end)
 
-    inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
-        local key = input.KeyCode.Name
-        if keys[key] ~= nil then
-            keys[key] = false
-        end
-    end)
+	inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
+		if keys[input.KeyCode.Name] ~= nil then
+			keys[input.KeyCode.Name] = false
+		end
+	end)
 
-    heartbeatConnection = RunService.Heartbeat:Connect(function()
-        local moveDir = Vector3.zero
-        local camCF = camera.CFrame
+	heartbeatConnection = RunService.Heartbeat:Connect(function()
+		local moveDir = Vector3.zero
+		local camCF = camera.CFrame
 
-        if keys.W then moveDir += camCF.LookVector end
-        if keys.S then moveDir -= camCF.LookVector end
-        if keys.A then moveDir -= camCF.RightVector end
-        if keys.D then moveDir += camCF.RightVector end
+		if keys.W then moveDir += camCF.LookVector end
+		if keys.S then moveDir -= camCF.LookVector end
+		if keys.A then moveDir -= camCF.RightVector end
+		if keys.D then moveDir += camCF.RightVector end
 
-        if moveDir.Magnitude > 0 then
-            moveDir = moveDir.Unit * speed
-            hrp.AssemblyLinearVelocity = moveDir
-        else
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
+		if moveDir.Magnitude > 0 then
+			hrp.AssemblyLinearVelocity = moveDir.Unit * speed
+		else
+			hrp.AssemblyLinearVelocity = Vector3.zero
+		end
+	end)
 end
 
 local function deactivateSwimBypass()
-    isActive = false
-    getgenv().SwimMethod = false
+	isActive = false
+	getgenv().SwimMethod = false
+	flyButton.Text = "Fly: OFF"
 
-    if inputBeganConnection then inputBeganConnection:Disconnect() end
-    if inputEndedConnection then inputEndedConnection:Disconnect() end
-    if heartbeatConnection then heartbeatConnection:Disconnect() end
+	if inputBeganConnection then inputBeganConnection:Disconnect() end
+	if inputEndedConnection then inputEndedConnection:Disconnect() end
+	if heartbeatConnection then heartbeatConnection:Disconnect() end
 
-    inputBeganConnection = nil
-    inputEndedConnection = nil
-    heartbeatConnection = nil
+	inputBeganConnection = nil
+	inputEndedConnection = nil
+	heartbeatConnection = nil
 
-    for k in pairs(keys) do
-        keys[k] = false
-    end
+	for k in pairs(keys) do
+		keys[k] = false
+	end
 
-    if hrp then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-    end
-
-    if humanoid then
-        humanoid.PlatformStand = false
-        humanoid.Sit = false
-        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-    end
-
-    destroyFloatingSeat()
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	humanoid.PlatformStand = false
+	humanoid.Sit = false
+	destroyFloatingSeat()
+	humanoid:ChangeState(Enum.HumanoidStateType.Running)
 end
 
--- Toggling
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.LeftAlt then
-        if not isActive then
-            activateSwimBypass()
-        else
-            deactivateSwimBypass()
-        end
-    end
+flyButton.MouseButton1Click:Connect(function()
+	if not isActive then
+		activateSwimBypass()
+	else
+		deactivateSwimBypass()
+	end
 end)
 
--- Respawn handler
-player.CharacterAdded:Connect(function(newChar)
-    character = newChar
-    hrp = character:WaitForChild("HumanoidRootPart")
-    humanoid = character:WaitForChild("Humanoid")
-    camera = workspace.CurrentCamera
+helpButton.MouseButton1Click:Connect(function()
+	local howToFlyUI = Instance.new("ScreenGui", game:GetService("CoreGui"))
+
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(0, 300, 0, 180)
+	f.Position = UDim2.new(0, 10, 1, -258)
+	f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	Instance.new("UICorner", f).Parent = f
+	f.Parent = howToFlyUI
+
+	local tb = Instance.new("Frame")
+	tb.Size = UDim2.new(1, 0, 0, 30)
+	tb.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	tb.Parent = f
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -50, 1, 0)
+	title.Position = UDim2.new(0, 10, 0, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "Fly Controls"
+	title.Font = Enum.Font.GothamBold
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 16
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = tb
+
+	local closeButton = Instance.new("TextButton")
+	closeButton.Size = UDim2.new(0, 20, 0, 20)
+	closeButton.Position = UDim2.new(1, -25, 0.5, -10)
+	closeButton.Text = "X"
+	closeButton.Font = Enum.Font.GothamBold
+	closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	closeButton.TextSize = 14
+	Instance.new("UICorner", closeButton).Parent = closeButton
+	closeButton.Parent = tb
+
+	local desc = Instance.new("TextLabel")
+	desc.Size = UDim2.new(1, -20, 1, -55)
+	desc.Position = UDim2.new(0, 10, 0, 40)
+	desc.BackgroundTransparency = 1
+	desc.Text = [[
+Fly Controls:
+- Click "Fly" to toggle movement ON/OFF.
+- Move using [W, A, S, D] keys.
+- Based on camera direction.
+- Works best on flat terrain.
+]]
+	desc.TextWrapped = true
+	desc.Font = Enum.Font.Gotham
+	desc.TextColor3 = Color3.fromRGB(255, 255, 255)
+	desc.TextSize = 14
+	desc.Parent = f
+
+	closeButton.MouseButton1Click:Connect(function()
+		howToFlyUI:Destroy()
+	end)
 end)
 
--- Keep changing the state while active
+-- Auto-state updater
 task.spawn(function()
-    while task.wait() do
-        if getgenv().SwimMethod and humanoid then
-            humanoid:ChangeState(Enum.HumanoidStateType.FallingDown)
-        end
-    end
+	while task.wait() do
+		if getgenv().SwimMethod and humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.FallingDown)
+		end
+	end
 end)
 
-print("✅ Swim bypass loaded — Press [LeftAlt] to toggle.")
+print("✅ Fly GUI loaded. Click 'Fly' to toggle.")
